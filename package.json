@@ -1,0 +1,16 @@
+{
+  "name": "defi-music-box",
+  "version": "1.0.0",
+  "description": "DeFi Music Box - Turn market volatility into music. OKX OnchainOS Hackathon Project",
+  "main": "public/index.html",
+  "scripts": {
+    "start": "npx serve public",
+    "dev": "npx serve public -p 3000"
+  },
+  "keywords": ["defi", "music", "okx", "hackathon", "visualization", "web3"],
+  "author": "namkunn",
+  "license": "MIT",
+  "devDependencies": {
+    "serve": "^14.2.0"
+  }
+}
