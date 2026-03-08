@@ -67,12 +67,20 @@
         .btn-play { background: linear-gradient(135deg, #00d4ff, #0099cc); color: #fff; }
         .btn-stop { background: rgba(255, 71, 87, 0.8); color: #fff; }
         .btn:hover { transform: scale(1.05); box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3); }
-        .now-playing { text-align: center; color: #00d4ff; font-size: 1.2em; margin-top: 20px; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .now-playing { text-align: center; color: #00d4ff; font-size: 1.2em; margin-top: 20px; min-height: 30px; }
         .hackathon-badge {
             position: fixed; bottom: 20px; right: 20px;
             background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.3);
             padding: 10px 20px; border-radius: 10px; font-size: 0.9em; color: #00d4ff;
         }
+        .audio-status {
+            position: fixed; bottom: 20px; left: 20px;
+            padding: 8px 16px; border-radius: 8px; font-size: 0.85em;
+            background: rgba(255, 193, 7, 0.2); border: 1px solid rgba(255, 193, 7, 0.5);
+            color: #ffc107;
+        }
+        .audio-status.ready { background: rgba(0, 255, 136, 0.2); border-color: rgba(0, 255, 136, 0.5); color: #00ff88; }
     </style>
 </head>
 <body>
@@ -86,7 +94,7 @@
     </div>
 
     <div class="token-list">
-        <div class="token-item">
+        <div class="token-item" data-index="0">
             <div class="token-icon btc">₿</div>
             <div class="token-info">
                 <div class="token-name">Bitcoin</div>
@@ -95,7 +103,7 @@
             <div class="token-change positive">+2.3%</div>
             <div class="instrument">🎹</div>
         </div>
-        <div class="token-item">
+        <div class="token-item" data-index="1">
             <div class="token-icon eth">Ξ</div>
             <div class="token-info">
                 <div class="token-name">Ethereum</div>
@@ -104,7 +112,7 @@
             <div class="token-change positive">+5.7%</div>
             <div class="instrument">🎸</div>
         </div>
-        <div class="token-item">
+        <div class="token-item" data-index="2">
             <div class="token-icon pepe">🐸</div>
             <div class="token-info">
                 <div class="token-name">PEPE</div>
@@ -122,102 +130,225 @@
 
     <div class="now-playing" id="nowPlaying">点击播放，聆听市场的声音...</div>
 
+    <div class="audio-status" id="audioStatus">🔇 音频未初始化</div>
     <div class="hackathon-badge">🏆 OKX OnchainOS AI松 | OpenClaw + Kimi K2.5</div>
 
     <script>
         // Market data
         const tokens = [
-            { name: 'BTC', price: 67234.50, change: 2.3, note: 'C3' },
-            { name: 'ETH', price: 3456.78, change: 5.7, note: 'E4' },
-            { name: 'PEPE', price: 0.00001234, change: 15.2, note: 'C5' }
+            { name: 'BTC', price: 67234.50, change: 2.3, note: 'C3', freq: 130.81 },
+            { name: 'ETH', price: 3456.78, change: 5.7, note: 'E4', freq: 329.63 },
+            { name: 'PEPE', price: 0.00001234, change: 15.2, note: 'C5', freq: 523.25 }
         ];
 
         let isPlaying = false;
+        let isInitialized = false;
         let synth = null;
         let animationId = null;
         let loopId = null;
+        let audioContextStarted = false;
 
-        // Initialize audio
-        async function initAudio() {
-            await Tone.start();
-            if (Tone.context.state === 'suspended') {
-                await Tone.context.resume();
+        // 更新音频状态显示
+        function updateAudioStatus(status, isReady = false) {
+            const statusEl = document.getElementById('audioStatus');
+            statusEl.textContent = status;
+            if (isReady) {
+                statusEl.classList.add('ready');
             }
-            
-            // Create a single poly synth
-            synth = new Tone.PolySynth(Tone.Synth, {
-                oscillator: { type: "triangle" },
-                envelope: { attack: 0.1, decay: 0.3, sustain: 0.5, release: 1 }
-            }).toDestination();
-            synth.volume.value = -5;
-            
-            console.log('✅ Audio initialized');
         }
 
-        // Play music
-        async function startMusic() {
-            if (isPlaying) return;
-            
+        // 初始化音频 - 必须在用户手势后调用
+        async function initAudio() {
+            if (isInitialized && synth) {
+                return true;
+            }
+
             try {
-                await initAudio();
+                console.log('🔊 开始初始化音频...');
+                updateAudioStatus('🔧 正在初始化音频...');
+
+                // 1. 首先启动音频上下文（必须在用户手势内）
+                if (!audioContextStarted) {
+                    await Tone.start();
+                    audioContextStarted = true;
+                    console.log('✅ Tone.start() 完成');
+                }
+
+                // 2. 确保音频上下文正在运行
+                if (Tone.context.state !== 'running') {
+                    await Tone.context.resume();
+                    console.log('✅ 音频上下文已恢复');
+                }
+
+                // 3. 创建合成器（如果还没有）
+                if (!synth) {
+                    synth = new Tone.PolySynth(Tone.Synth, {
+                        oscillator: { type: "triangle" },
+                        envelope: { 
+                            attack: 0.05, 
+                            decay: 0.2, 
+                            sustain: 0.6, 
+                            release: 0.8 
+                        }
+                    });
+                    
+                    // 连接到输出
+                    synth.toDestination();
+                    synth.volume.value = -3; // 稍微降低音量避免破音
+                    
+                    console.log('✅ Synth 创建成功');
+                }
+
+                // 4. 测试音频是否正常工作（播放一个极短的测试音）
+                try {
+                    const testOsc = new Tone.Oscillator(440, "sine").toDestination();
+                    testOsc.volume.value = -20;
+                    testOsc.start().stop("+0.05");
+                    console.log('✅ 音频测试成功');
+                } catch (testErr) {
+                    console.warn('⚠️ 音频测试警告:', testErr);
+                }
+
+                isInitialized = true;
+                updateAudioStatus('🔊 音频已就绪', true);
+                console.log('✅ 音频初始化完成');
+                return true;
+
+            } catch (err) {
+                console.error('❌ 音频初始化失败:', err);
+                updateAudioStatus('❌ 音频初始化失败: ' + err.message);
+                return false;
+            }
+        }
+
+        // 播放音乐
+        async function startMusic() {
+            if (isPlaying) {
+                console.log('已经在播放中');
+                return;
+            }
+
+            const playBtn = document.getElementById('playBtn');
+            playBtn.disabled = true;
+
+            try {
+                // 初始化音频
+                const initSuccess = await initAudio();
+                if (!initSuccess) {
+                    document.getElementById('nowPlaying').textContent = '❌ 音频初始化失败，请刷新页面后重试';
+                    playBtn.disabled = false;
+                    return;
+                }
+
+                // 再次确认音频上下文状态
+                if (Tone.context.state !== 'running') {
+                    await Tone.context.resume();
+                }
+
                 isPlaying = true;
                 document.getElementById('nowPlaying').textContent = '🎵 正在演奏：《加密市场狂想曲》...';
-                
-                // Play all three notes
-                const now = Tone.now();
-                synth.triggerAttackRelease(tokens[0].note, "2n", now);
-                synth.triggerAttackRelease(tokens[1].note, "2n", now + 0.5);
-                synth.triggerAttackRelease(tokens[2].note, "2n", now + 1.0);
-                
-                // Highlight tokens
-                highlightToken(0);
-                setTimeout(() => highlightToken(1), 500);
-                setTimeout(() => highlightToken(2), 1000);
-                
-                // Loop
-                loopId = setTimeout(() => {
-                    if (isPlaying) playLoop();
-                }, 4000);
-                
-                // Visualizer
+                playBtn.textContent = '⏸ 播放中...';
+
+                // 使用 Tone.js 的 Transport 来调度音符，更精确
+                playChord();
+
+                // 启动循环
+                scheduleNextLoop();
+
+                // 启动可视化
                 startVisualizer();
-                
+
             } catch (err) {
-                console.error('Error:', err);
-                document.getElementById('nowPlaying').textContent = '❌ 请先点击页面任意位置，再点击播放';
+                console.error('❌ 播放失败:', err);
+                document.getElementById('nowPlaying').textContent = '❌ 播放失败: ' + err.message;
+                isPlaying = false;
+                playBtn.disabled = false;
             }
         }
 
-        function playLoop() {
+        // 播放和弦
+        function playChord() {
+            if (!isPlaying || !synth) return;
+
+            const now = Tone.now();
+            
+            // 播放三个音符，形成和弦
+            try {
+                synth.triggerAttackRelease(tokens[0].note, "2n", now);
+                console.log('🎹 播放:', tokens[0].note, '@', now);
+                
+                setTimeout(() => highlightToken(0), 0);
+                
+                setTimeout(() => {
+                    if (isPlaying && synth) {
+                        synth.triggerAttackRelease(tokens[1].note, "2n", Tone.now());
+                        console.log('🎸 播放:', tokens[1].note);
+                        highlightToken(1);
+                    }
+                }, 500);
+                
+                setTimeout(() => {
+                    if (isPlaying && synth) {
+                        synth.triggerAttackRelease(tokens[2].note, "2n", Tone.now());
+                        console.log('🎺 播放:', tokens[2].note);
+                        highlightToken(2);
+                    }
+                }, 1000);
+                
+            } catch (err) {
+                console.error('❌ 播放音符失败:', err);
+            }
+        }
+
+        // 调度下一次循环
+        function scheduleNextLoop() {
             if (!isPlaying) return;
             
-            const now = Tone.now();
-            synth.triggerAttackRelease(tokens[0].note, "2n", now);
-            synth.triggerAttackRelease(tokens[1].note, "2n", now + 0.5);
-            synth.triggerAttackRelease(tokens[2].note, "2n", now + 1.0);
-            
-            highlightToken(0);
-            setTimeout(() => highlightToken(1), 500);
-            setTimeout(() => highlightToken(2), 1000);
-            
-            loopId = setTimeout(() => playLoop(), 4000);
+            loopId = setTimeout(() => {
+                if (isPlaying) {
+                    playChord();
+                    scheduleNextLoop();
+                }
+            }, 4000);
         }
 
         function stopMusic() {
             isPlaying = false;
-            clearTimeout(loopId);
-            cancelAnimationFrame(animationId);
+            
+            if (loopId) {
+                clearTimeout(loopId);
+                loopId = null;
+            }
+            
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+
+            // 释放所有音符
+            if (synth) {
+                try {
+                    synth.releaseAll();
+                } catch (e) {
+                    // 忽略释放错误
+                }
+            }
+
             document.getElementById('nowPlaying').textContent = '点击播放，聆听市场的声音...';
+            document.getElementById('playBtn').textContent = '▶️ 播放市场交响乐';
+            document.getElementById('playBtn').disabled = false;
         }
 
         function highlightToken(index) {
             const items = document.querySelectorAll('.token-item');
-            items[index].style.transform = 'scale(1.02)';
-            items[index].style.boxShadow = '0 0 30px rgba(0, 212, 255, 0.5)';
-            setTimeout(() => {
-                items[index].style.transform = 'scale(1)';
-                items[index].style.boxShadow = 'none';
-            }, 500);
+            if (items[index]) {
+                items[index].style.transform = 'scale(1.02)';
+                items[index].style.boxShadow = '0 0 30px rgba(0, 212, 255, 0.5)';
+                setTimeout(() => {
+                    items[index].style.transform = 'scale(1)';
+                    items[index].style.boxShadow = 'none';
+                }, 500);
+            }
         }
 
         // Visualizer
@@ -229,6 +360,7 @@
 
             function animate() {
                 if (!isPlaying) return;
+                
                 ctx.fillStyle = 'rgba(10, 14, 26, 0.2)';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -241,22 +373,37 @@
                     ctx.fillStyle = grad;
                     ctx.fillRect(i * (canvas.width / 50), canvas.height - h, (canvas.width / 50) - 2, h);
                 }
+                
                 animationId = requestAnimationFrame(animate);
             }
+            
             animate();
         }
 
-        // Event listeners
-        document.getElementById('playBtn').addEventListener('click', startMusic);
-        document.getElementById('stopBtn').addEventListener('click', stopMusic);
-        
-        // Unlock audio on first interaction
-        document.body.addEventListener('click', async function unlock() {
-            if (Tone.context.state === 'suspended') {
-                await Tone.start();
-                await Tone.context.resume();
+        // 事件监听器
+        document.getElementById('playBtn').addEventListener('click', async () => {
+            console.log('🎵 播放按钮被点击');
+            await startMusic();
+        });
+
+        document.getElementById('stopBtn').addEventListener('click', () => {
+            console.log('⏹ 停止按钮被点击');
+            stopMusic();
+        });
+
+        // 页面加载完成后的提示
+        window.addEventListener('load', () => {
+            console.log('🎵 DeFi Music Box 已加载');
+            console.log('Tone.js 版本:', Tone.version);
+            console.log('音频上下文状态:', Tone.context.state);
+        });
+
+        // 处理页面可见性变化（切换标签页时暂停）
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && isPlaying) {
+                console.log('页面隐藏，继续后台播放');
             }
-        }, { once: true });
+        });
     </script>
 </body>
 </html>
