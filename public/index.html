@@ -250,7 +250,15 @@
 
         // Initialize audio context on user interaction
         async function initAudio() {
-            await Tone.start();
+            try {
+                await Tone.start();
+                console.log('✅ Audio context started');
+                
+                // Resume if suspended (required for some browsers)
+                if (Tone.context.state === 'suspended') {
+                    await Tone.context.resume();
+                    console.log('✅ Audio context resumed');
+                }
             
             // Create synths for each token
             synths.btc = new Tone.PolySynth(Tone.Synth, {
@@ -270,6 +278,12 @@
                 envelope: { attack: 0.02, decay: 0.1, sustain: 0.3, release: 0.5 }
             }).toDestination();
             synths.pepe.volume.value = -5;
+            
+            } catch (error) {
+                console.error('❌ Audio init failed:', error);
+                alert('请点击页面任意位置后再点击播放按钮以启用音频');
+            }
+        }
         }
 
         // Map price change to note
@@ -304,11 +318,12 @@
         async function startMusic() {
             if (isPlaying) return;
             
-            await initAudio();
-            isPlaying = true;
-            
-            document.getElementById('nowPlaying').textContent = 
-                '🎵 正在演奏：《加密市场狂想曲》...';
+            try {
+                await initAudio();
+                isPlaying = true;
+                
+                document.getElementById('nowPlaying').textContent = 
+                    '🎵 正在演奏：《加密市场狂想曲》...';
 
             // Play each token's note based on its change
             tokens.forEach((token, index) => {
@@ -330,6 +345,12 @@
 
             // Start visualizer
             startVisualizer();
+            
+            } catch (error) {
+                console.error('❌ Play failed:', error);
+                document.getElementById('nowPlaying').textContent = 
+                    '❌ 音频启动失败，请刷新页面后先点击页面任意位置，再点击播放';
+            }
         }
 
         function stopMusic() {
@@ -409,6 +430,15 @@
             canvas.width = canvas.offsetWidth;
             canvas.height = canvas.offsetHeight;
         });
+
+        // Unlock audio on first user interaction (required for mobile)
+        document.body.addEventListener('click', async () => {
+            if (Tone.context.state === 'suspended') {
+                await Tone.start();
+                await Tone.context.resume();
+                console.log('✅ Audio unlocked by user interaction');
+            }
+        }, { once: true });
     </script>
 </body>
 </html>
