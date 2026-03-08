@@ -328,11 +328,17 @@
             tokens.forEach((token, index) => {
                 const note = getNoteFromChange(token.change);
                 const delay = index * 500; // Stagger notes
+                const synthKey = token.name.toLowerCase(); // 'btc', 'eth', 'pepe'
+                
+                console.log(`Playing ${token.name}: note=${note}, synth=${synthKey}, exists=${!!synths[synthKey]}`);
                 
                 setTimeout(() => {
-                    if (isPlaying) {
-                        synths[token.instrument].triggerAttackRelease(note, "2n");
+                    if (isPlaying && synths[synthKey]) {
+                        console.log(`Triggering ${synthKey} with note ${note}`);
+                        synths[synthKey].triggerAttackRelease(note, "2n");
                         highlightToken(index);
+                    } else {
+                        console.error(`Synth not found: ${synthKey}`);
                     }
                 }, delay);
             });
