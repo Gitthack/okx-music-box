@@ -7,10 +7,20 @@
     "start": "npx serve public",
     "dev": "npx serve public -p 3000"
   },
-  "keywords": ["defi", "music", "okx", "hackathon", "visualization", "web3"],
+  "keywords": [
+    "defi",
+    "music",
+    "okx",
+    "hackathon",
+    "visualization",
+    "web3"
+  ],
   "author": "namkunn",
   "license": "MIT",
   "devDependencies": {
     "serve": "^14.2.0"
+  },
+  "dependencies": {
+    "puppeteer": "^24.38.0"
   }
 }
